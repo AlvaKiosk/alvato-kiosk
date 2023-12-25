@@ -13,7 +13,7 @@
 
 
     // --------------- Structure ---------------
-    struct SSID{
+    struct WIFI{
         String ssid;
         String key;
     };
@@ -27,37 +27,64 @@
     };
 
     struct ASSET{
+        String merchantCode;
+        String branchCode;
         String assetCode;
         String assetName;
+        String assetType;
         String assetMac;
+        String firmware;
+        String ntp1;
+        String ntp2;
+        String userAdmin;
+        String userPass;
     };
 
     struct MQTTCFG{
+        bool enable = false;
         String mqtthost;
         String mqttport;
         String mqttuser;
         String mqttpass;
+        String topicPub;
+        String topicSub;
     };
 
-    struct APIHOST{
+    struct APISERVICE{
         String  apihost;
         String  apikey;
         String  apisecret;
+        String  apihostqr;
+        String  assetregister;
+        String  getuserinfo;
+        String  updatecredit;
+        String  heartbeat;
+        String  updatepoint;
+        String  qrgen;
+        String  slipcheck;
+        String  newcointrans;
     };
+
 
     struct CONFIG{
         String header;  //To verify it is asset of company
+        String deviceId;
         ASSET asset;
-        APIHOST apihost[2];
-        MQTTCFG mqttcfg[2];
-        SSID wifissid[2];
-        int pricePerCoin = 0;
-        int pricePerBill = 0;
-        int topupPrice[6];
-        int maxTopup = 0;
+        MQTTCFG mqtt[2];
+        WIFI wifi[2];
+        APISERVICE api;
+        bool cashEnable;
+        bool qrEnable;
+        int pricePerCoin;
+        int pricePerBill;
+        int topupPrice[5];
+        int maxTopup;
     };
 
 
+
+
+ 
 
 
     // void IRAM_ATTR gpio_isr_handler(void* arg);
@@ -65,8 +92,14 @@
     // void init_interrupt(void);
     void initGPIO(unsigned long long INP, unsigned long long OUTP);
 
-    void printLocalTime(tm * timeinfo);
+    void initCFG(CONFIG &cfg);
+    void showCFG(CONFIG &cfg);
+    void getNVCFG(Preferences nvcfg, CONFIG &cfg);
 
+    void printLocalTime(tm * timeinfo);
+    void getTimeWithFormat(char *_buff,tm *_tm);
+
+    void wifiCFG(Preferences nvcfg, CONFIG &cfg);
     //Function Load config from NV-RAM
     
 
