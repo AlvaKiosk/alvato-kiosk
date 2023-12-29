@@ -14,6 +14,7 @@
 #include <nvs_flash.h>
 #include "timer.h"
 #include <time.h>
+#include <esp32fota.h>
 
 
 //Below 4 libs required by ESP32Fota

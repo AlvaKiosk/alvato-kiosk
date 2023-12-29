@@ -46,7 +46,7 @@ uint32_t getTagInfo(void);
 void mqConnection(void);
 void mqCallback(char* topic, byte* payload, unsigned int length);
 
-
+void alvatoOtaFinishedCb(int partition, bool restart_after);
 /*-----------------  Finish Function declaration in main file -------------------*/
 
 
@@ -61,6 +61,7 @@ int coinCount = 0;
 int billValue = 0;
 int billCount = 0;
 int topupValue = 0;
+bool creditUpdateFlag = false;
 
 // int pricePerCoin = 1;
 // int pricePerBill = 10;
@@ -140,13 +141,14 @@ String localIP;
 uint8_t actionState;
 
 
-
-
 //Alvato Parameter
 alvato backend;
 String response ="";
 
 
+//OTA intial parameter
+esp32FOTA FOTA(CODENAME, FIRMWARE, false, true); 
+//End OTA initial parameter
 
 
 /*-------------------------------------  Setup Area -------------------------------------*/
@@ -155,7 +157,10 @@ void setup() {
   //Setup serial console port.
   Serial.begin(115200);
 
-    //Setup Nextion port for EASY NEXTION Library
+  //OTA callback function
+  FOTA.setUpdateFinishedCb(alvatoOtaFinishedCb);
+
+  //Setup Nextion port for EASY NEXTION Library
   #ifdef EASY_NEXTION  // For initial
     Serial.println("Setup -> EASY NEXTION Library.");
     myNex.begin(9600,SERIAL_8N1,RXU1,TXU1);
@@ -188,15 +193,6 @@ void setup() {
     rfid.PCD_DumpVersionToSerial();	// Show details of PCD - MFRC522 Card Reader details
     // Serial.println(F("Scan PICC to see UID, SAK, type, and data blocks..."));
   #endif
-
-  //Setup QR Reader port
-  #ifdef QRREADER
-    //Serial.println("Setup -> Serial port for QR Reqder.");
-    // Serial2.begin(9600,SERIAL_8N1, RXU2, TXU2);  // QR Reader uart
-    
-  #endif
-
-
 
 
   /*--------------- Initial Nextion page for booting  ---------------*/
@@ -253,8 +249,8 @@ void setup() {
 
   // ---------- WiFi Configuration
   cfgRAM.begin("config",false);  //Open Preference
-  Serial.println("Setup -> API Info");
 
+  Serial.println("Setup -> API Parameter");
   // ---------- assetRegister
   if(cfgRAM.isKey("assetregister")){
     cfgInfo.api.assetregister = cfgRAM.getString("assetregister");
@@ -329,8 +325,12 @@ void setup() {
 
 
   // ------- Default wifi is  myWiFi   add to List.
-  Serial.println("  |- Config.cpp -> WiFi SSID: myWiFi ,Key: 1100110011");
+  Serial.println("  |- Config.cpp -> WiFi SSID: from default in code.");
   wifiMulti.addAP("myWiFi","1100110011");
+  wifiMulti.addAP("Cashless","a1b2c3d4e5");
+  wifiMulti.addAP("Casless-shop","a1b2c3d4e5");
+  wifiMulti.addAP("Casless-shop-2.4G-ext","a1b2c3d4e5");
+  wifiMulti.addAP("CashlessCashier","a1b2c3d4e5");
 
   // ------- Connecting WiFi
   int wifiLimit = 10; //WiFi retry limit
@@ -419,7 +419,7 @@ void setup() {
       Serial.println("");
 
       // ----------- Device ID
-      Serial.println("Setup -> Getting Device ID.");
+      Serial.println("Setup -> Getting DeviceID.");
       if(cfgRAM.isKey("deviceId")){
         cfgInfo.deviceId = cfgRAM.getString("deviceId");
         Serial.printf("  |- NVRAM -> %s\n",cfgInfo.deviceId.c_str());
@@ -441,7 +441,7 @@ void setup() {
 
       // ----------- assetCode
       Serial.println();
-      Serial.println("Setup -> Getting Asset Info.");
+      Serial.println("Setup -> Getting Asset Infomation.");
       if(cfgRAM.isKey("assetCode")){
         cfgInfo.asset.assetCode = cfgRAM.getString("assetCode");
         Serial.printf("  |- NVRAM -> assetCode: %s\n",cfgInfo.asset.assetCode.c_str());
@@ -472,7 +472,7 @@ void setup() {
       }else{
         Serial.printf("  |- Config.cpp -> Firmware: %s\n",cfgInfo.asset.firmware.c_str());
       }           
- 
+
       // ----------  Device Header
       Serial.println();
       Serial.println("Setup -> Verify Device Header.");
@@ -525,6 +525,7 @@ void setup() {
               }else{
                 cfgInfo.header = doc["config"]["header"].as<String>();
                 cfgInfo.asset.assetCode = doc["assetCode"].as<String>();
+                cfgInfo.asset.assetName = doc["assetName"].as<String>();
 
                 cfgRAM.putString("header",cfgInfo.header);
                 cfgRAM.putString("assetCode",cfgInfo.asset.assetCode);
@@ -558,6 +559,21 @@ void setup() {
       }
     cfgRAM.end(); //Close Preference
 
+
+    //OTA intial parameter
+      // FOTA("alvatokiosk",cfgInfo.asset.firmware.c_str() , false, true); 
+
+    
+    
+    //End OTA initial parameter
+
+
+    // ----------- End OTA parameters
+
+
+
+
+  
 
     // ------------------------    ESP Insight ------------------------
     #ifdef ESPINSIGHT
@@ -642,17 +658,8 @@ void setup() {
       Serial.printf("   |- Confog.cpp -> MQTT-1 Config: %s\n",cfgInfo.mqtt[1].mqtthost.c_str());
     }
     cfgRAM.end();
-
-
     // -------- Connecting to mqtt broker
     mqConnection();
-
-
-
-    // ---------------------------------------------------------------------------------
-    // -                         Getting other configuration                           -
-    // ---------------------------------------------------------------------------------
-
 
     // ------------------------    Getting / Setting Price button  ------------------------ 
     cfgRAM.begin("config",false);
@@ -696,6 +703,7 @@ void setup() {
       }else{
         Serial.printf("  |- Config.cpp -> maxTopup: %d\n",cfgInfo.maxTopup);
       }
+      myNex.writeNum("numPad.maxValue.val",cfgInfo.maxTopup);
 
     // ---------- cashEnable
       if(cfgRAM.isKey("cashEnable")){
@@ -789,6 +797,17 @@ void setup() {
     backend.setVar("newcointrans",cfgInfo.api.newcointrans.c_str());
 
 
+    // ----------- OTA parameters
+    cfgRAM.begin("config",false);
+      if(cfgRAM.isKey("otaurl")){
+        cfgInfo.manifest_url = cfgRAM.getString("otaurl");
+        Serial.printf("  |- NVRAM -> OTA_url: %s\n",cfgInfo.manifest_url.c_str());
+      }else{
+        Serial.printf("  |- Config.cpp -> OTA_url: %s\n",cfgInfo.manifest_url.c_str());
+      }
+    cfgRAM.end();
+
+
 
 
 
@@ -815,10 +834,11 @@ void setup() {
 
   Serial.println("");
   Serial.println("Booting done...");
-  Serial.println("************************  MCU Ready ************************");
+  Serial.println("************************  AlvatoKiosk Ready ************************");
+  Serial.printf("            Asset Code: %s      Asset Name: %s\n",cfgInfo.asset.assetCode, cfgInfo.asset.assetName);
+  Serial.printf("            Firmware: %s             IP: %s\n",cfgInfo.asset.firmware,localIP);
+  Serial.println("********************************************************************");
   Serial.println();
-  Serial.println();
-  Serial.println("************************ Nextion Display Started ************************");
 
   #ifdef EASY_NEXTION  //For command
     //Move to cover page
@@ -876,6 +896,7 @@ void setup() {
       case 2: // ota state
         doc["response"] = "ota";
         doc["status"] = "success";  
+        doc["firmware"] = cfgInfo.asset.firmware;
         break;
       default:
         break;
@@ -976,7 +997,7 @@ void loop() {
     switch(myNex.currentPageId){
       case 0: // Cover page
         //Show t5
-        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + " IP: " +localIP);
+        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + ", Fw: " +cfgInfo.asset.firmware);
         myNex.writeStr("vis t5,1");
 
 
@@ -999,7 +1020,7 @@ void loop() {
         break;
       case 1: // Page1 (topup): Read RFID and get userInfo P
         //Show t5
-        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + " IP: " +localIP);
+        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + ", Fw: " +cfgInfo.asset.firmware);
         myNex.writeStr("vis t5,1");
         myNex.writeStr("topup.msgTxt.txt","Maximum Topup is " + String(cfgInfo.maxTopup));
  
@@ -1131,13 +1152,17 @@ void loop() {
         break;
       case 2: // Cash page
         //Show t5
-        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + " IP: " +localIP);
+        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + ", Fw: " +cfgInfo.asset.firmware);
         myNex.writeStr("vis t5,1");
 
         if(cfgInfo.qrEnable){ // true
-          myNex.writeStr("b3.picc=3");
-          myNex.writeStr("tsw b3,1");
-          
+          if((coinValue > 0) || (billValue > 0)){
+            myNex.writeStr("b3.picc=4");
+            myNex.writeStr("tsw b3,0");
+          }else{
+            myNex.writeStr("b3.picc=3");
+            myNex.writeStr("tsw b3,1");
+          }
         }else{ // false
           myNex.writeStr("b3.picc=4");
           myNex.writeStr("tsw b3,0");
@@ -1156,18 +1181,19 @@ void loop() {
           myNex.writeStr("tsw b2,0");
           myNex.writeStr("b2.picc=4");
 
-          //Disable qr button
-          if(cfgInfo.qrEnable){
-            myNex.writeStr("b3.picc=4");
-            myNex.writeStr("tsw b3,0");
-          }
-
-
 
           Serial.printf("TopupValue: %d\n",topupValue);
     
-          if(topupValue == (coinValue + billValue)){
+          if((coinValue + billValue) >= topupValue){
             myNex.writeStr("t2.txt",String(coinValue + billValue));
+
+            if((coinValue + billValue) > topupValue){
+              Serial.println("Topup Higher");
+            }else if((coinValue + billValue)== topupValue){
+              Serial.println("Topup equal");
+              
+            }
+
             waitForPay = false;
             digitalWrite(ENCOIN,LOW);
             Serial.println("Disable ENCOIN");
@@ -1211,7 +1237,7 @@ void loop() {
         break;
       case 3: // QR Page
         //Show t5
-        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + " IP: " +localIP);
+        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + ", Fw: " +cfgInfo.asset.firmware);
         myNex.writeStr("vis t5,1");
 
         #ifdef QRREADER
@@ -1233,7 +1259,7 @@ void loop() {
               if(!qrSlip.isEmpty()){
                 //Call api for slipCheck
                 // String response;
-                int rescode = backend.slipCheck(cfgInfo.asset.branchCode.c_str(),cfgInfo.asset.assetName.c_str(),
+                int rescode = backend.slipCheck(cfgInfo.asset.branchCode.c_str(),cfgInfo.asset.assetCode.c_str(),
                 userinfo.tagId.c_str(),
                 qrSlip.c_str(),
                 qrGenId.c_str(),
@@ -1251,7 +1277,7 @@ void loop() {
           
                   //UpdateCredit here.  check by qrgenId
                   rescode = 0;
-                  rescode = backend.updateCredit(userinfo.tagId.c_str(),topupValue,cfgInfo.asset.assetCode.c_str(),response);
+                  rescode = backend.updateCredit(userinfo.tagId.c_str(),topupValue,cfgInfo.asset.assetName.c_str(),response);
                   if(rescode == 200){
                     StaticJsonDocument<512> doc;
                     DeserializationError error = deserializeJson(doc, response);
@@ -1352,6 +1378,9 @@ void loop() {
         // }
         break;
       case 7: // Login Page
+        myNex.writeStr("t5.txt",cfgInfo.asset.assetName + ", Fw: " +cfgInfo.asset.firmware);
+        myNex.writeStr("vis t5,1");
+
         myNex.writeStr("b1.picc=18");
         myNex.writeStr("b1.picc2=19");
         myNex.writeStr("b2.picc=18");
@@ -1496,6 +1525,10 @@ void trigger5(){ // Cancel btn on cashPage
 void trigger6(){ // QR Payment button page3
   // String response;
   Serial.println("Trigger6: QR Payment on cashPage");
+  
+  //Disable QR button
+  myNex.writeStr("b3.picc=4");
+  myNex.writeStr("tsw b3,0");
 
   digitalWrite(ENCOIN,LOW);
   waitForPay = false;
@@ -1889,6 +1922,7 @@ void mqCallback(char* topic, byte* payload, unsigned int length){
   // String jsonmsg;
   // DynamicJsonDocument doc(512);
   bool rebootFlag = false;
+  bool updatedNeeded = false;
   bool publishFlag = false;
 
   Serial.println();
@@ -1921,10 +1955,6 @@ void mqCallback(char* topic, byte* payload, unsigned int length){
     //------------------------------ Action Reboot -----------------------------
     getTimeWithFormat(timeNowFormat,&timeNow);
     
-    cfgRAM.begin("state",false);
-      cfgRAM.putUInt("actionState",1); //Rebooting
-    cfgRAM.end();
-
     doc.clear();
     doc["response"] = "reboot";
     doc["status"] = "rebooting";
@@ -1957,7 +1987,22 @@ void mqCallback(char* topic, byte* payload, unsigned int length){
 
   }else if(action == "ota"){
     //------------------------------ Action OTA -----------------------------
+    FOTA.setManifestURL( cfgInfo.manifest_url.c_str() ); // set url for ota.json
+    updatedNeeded = FOTA.execHTTPcheck();
 
+    doc.clear();
+    doc["response"] = "ota";
+    if(updatedNeeded){
+      doc["status"] = "Updating";
+    }else{
+      doc["status"] = "Rejected";
+    }
+
+    doc["details"]["branchCode"] =cfgInfo.asset.branchCode;
+    doc["details"]["assetCode"]=cfgInfo.asset.assetCode;
+    doc["details"]["timeStamp"]=timeNowFormat;
+    doc["details"]["timeEpoch"]=mktime(&timeNow);
+    publishFlag = true;
 
   }else if(action == "smartconfig"){
    Serial.println("Execute Action: smartConfig"); 
@@ -2174,8 +2219,7 @@ void mqCallback(char* topic, byte* payload, unsigned int length){
     getTimeWithFormat(timeNowFormat,&timeNow);
     doc.clear();
     doc["response"]="qrEnable";
-    doc["status"]="success";
-    doc["value"] = cfgInfo.qrEnable;
+    doc["status"]=cfgInfo.qrEnable?"enable":"disable";
     doc["details"]["branchCode"] =cfgInfo.asset.branchCode;
     doc["details"]["assetCode"]=cfgInfo.asset.assetCode;    
     doc["details"]["timeStamp"]=timeNowFormat;
@@ -2236,6 +2280,24 @@ void mqCallback(char* topic, byte* payload, unsigned int length){
     doc["details"]["timeStamp"]=timeNowFormat;
     doc["details"]["timeEpoch"]=mktime(&timeNow);   
     publishFlag = true;
+  }else if(action == "unLock"){
+    bool value = doc["value"];
+
+    if(value){
+      digitalWrite(UNLOCK,value);
+    }else{
+      digitalWrite(UNLOCK,value);
+    }
+
+    getTimeWithFormat(timeNowFormat,&timeNow);
+    doc.clear();
+    doc["response"]="unLock";
+    doc["status"]=value;
+    doc["details"]["branchCode"] =cfgInfo.asset.branchCode;
+    doc["details"]["assetCode"]=cfgInfo.asset.assetCode;    
+    doc["details"]["timeStamp"]=timeNowFormat;
+    doc["details"]["timeEpoch"]=mktime(&timeNow);   
+    publishFlag = true;   
   }
 
   if(publishFlag){
@@ -2262,11 +2324,34 @@ void mqCallback(char* topic, byte* payload, unsigned int length){
   }
 
   if(rebootFlag == 1){
+    //Mark reboot state to NVRAM
+    cfgRAM.begin("state",false);
+      cfgRAM.putUInt("actionState",1); //Rebooting
+    cfgRAM.end();
+
     rebootFlag = 0;
     delay(500);
     ESP.restart();
+  }
+
+  // OTA Update process
+  if (updatedNeeded){;
+    myNex.writeStr("page 0");
+    myNex.writeStr("vis title,0");
+    myNex.writeStr("p0.pic=13");
+    myNex.writeStr("msgTxt.y=320");
+    myNex.writeStr("msgTxt.pco=63488");
+    myNex.writeStr("vis msgTxt,1");
+    myNex.writeStr("msgTxt.txt","Updating Firmware");
+    FOTA.execOTA();
   }
 }
 
 
 
+void alvatoOtaFinishedCb(int partition, bool restart_after) {
+    cfgRAM.begin("state",false);
+      cfgRAM.putUInt("actionState",2); //Mark update firmware
+    cfgRAM.end();
+    Serial.println("[actionState] -> set flag OTA update finish. ");
+}

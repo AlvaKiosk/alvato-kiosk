@@ -1,3 +1,6 @@
+#define CODENAME "alvatokiosk"
+#define FIRMWARE "1.0.0"
+
 #ifndef config_h
     #define config_h
 
@@ -68,6 +71,7 @@
 
     struct CONFIG{
         String header;  //To verify it is asset of company
+        String manifest_url; // url for ota.json
         String deviceId;
         ASSET asset;
         MQTTCFG mqtt[2];

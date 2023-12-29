@@ -1,0 +1,12 @@
+[
+    {
+        "type": "alvatokiosk",
+        "version": "1.0.1",
+        "url": "https://flipup.net/firmware/ALVATOKIOSK/alvatokiosk-v1.0.1.bin"
+    },
+    {
+        "type": "alvatokiosk",
+        "version": "1.0.2",
+        "url": "https://flipup.net/firmware/ALVATOKIOSK/alvatokiosk-v1.0.2.bin"
+    }
+]

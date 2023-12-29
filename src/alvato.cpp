@@ -276,7 +276,7 @@ int alvato::slipCheck(const char *branchCode, const char *assetCode, const char*
 int alvato::assetRegister(const char *branchCode, const char *macAddr, const char *firmware, String &payload){
     HTTPClient http;
     String reqbody;
-    String url = api_apiHost + api_register;
+    String url = api_apiHostQR + api_register;
     Serial.print("url: ");
     Serial.println(url);
     // String url = uri_alvato + "/api/easySlip/v1.0.0/slipCheckQrID";

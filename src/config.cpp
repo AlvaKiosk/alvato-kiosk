@@ -39,6 +39,8 @@ void initCFG(CONFIG &cfg){
 
   cfg.header="ALVATO";
 
+  cfg.manifest_url = "https://flipup.net/firmware/ALVATOKIOSK/ota.json";
+
   cfg.wifi[0].ssid = "myWiFi";
   cfg.wifi[0].key = "1100110011";
 
@@ -61,7 +63,7 @@ void initCFG(CONFIG &cfg){
   cfg.asset.assetName="DEMO";
   cfg.asset.assetType="KIOSK";
   cfg.asset.assetMac="";
-  cfg.asset.firmware="1.0.0";
+  cfg.asset.firmware=FIRMWARE;
   cfg.asset.userAdmin="admin";
   cfg.asset.userPass="4556"; //13897
   cfg.asset.ntp1="1.th.pool.ntp.org";
@@ -92,7 +94,7 @@ void initCFG(CONFIG &cfg){
   // cfg.api.apihost="https://alvato-wallet-5a36860a4b3d.herokuapp.com";
 
 
-  cfg.api.apihost="http://192.168.146.34";
+  cfg.api.apihost="http://192.168.1.100";
   cfg.api.apihostqr="https://alvato-wallet-5a36860a4b3d.herokuapp.com";
   cfg.api.apikey="";
   cfg.api.apisecret="";
